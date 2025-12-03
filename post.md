@@ -318,111 +318,378 @@ sequenceDiagram
     SSG->>FS: Generate robots.txt
 ```
 
-## Physical Schema (nếu dùng SQL Database)
+## Physical Schema (MongoDB)
 
-```sql
--- Topics table
-CREATE TABLE topics (
-    slug VARCHAR(100) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    icon VARCHAR(50),
-    color VARCHAR(7),
-    "order" INT DEFAULT 0
-);
+### Collection Structure
 
--- Clusters table
-CREATE TABLE clusters (
-    slug VARCHAR(100) PRIMARY KEY,
-    topic_slug VARCHAR(100) NOT NULL REFERENCES topics(slug),
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    thumbnail VARCHAR(500),
-    "order" INT DEFAULT 0
-);
+```javascript
+// ===== SITE COLLECTION =====
+// Collection: site (singleton - chỉ 1 document)
+{
+  _id: "main",
+  name: "Tech Blog",
+  description: "Blog công nghệ",
+  logo: "/images/logo.svg",
+  seo: {
+    title: "Tech Blog - Chia sẻ kiến thức công nghệ",
+    description: "...",
+    keywords: ["tech", "programming"]
+  },
+  navigation: {
+    main: [
+      { label: "Trang chủ", url: "/" },
+      { label: "DevOps", url: "/devops/" }
+    ],
+    footer: [...]
+  },
+  social: {
+    facebook: "https://facebook.com/techblog",
+    twitter: "https://twitter.com/techblog"
+  }
+}
 
--- Resources table
-CREATE TABLE resources (
-    slug VARCHAR(100) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    icon VARCHAR(50),
-    thumbnail VARCHAR(500)
-);
+// ===== AUTHORS COLLECTION =====
+// Collection: authors
+{
+  _id: ObjectId("..."),
+  slug: "nguyen-van-a",           // unique index
+  name: "Nguyễn Văn A",
+  avatar: "/images/authors/nguyen-van-a.jpg",
+  bio: "Senior Developer với 10 năm kinh nghiệm",
+  role: "Senior Developer",
+  social: {
+    twitter: "https://twitter.com/nguyenvana",
+    github: "https://github.com/nguyenvana",
+    linkedin: "https://linkedin.com/in/nguyenvana"
+  },
+  createdAt: ISODate("2024-01-15T00:00:00Z")
+}
 
--- Authors table
-CREATE TABLE authors (
-    slug VARCHAR(100) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    avatar VARCHAR(500),
-    bio TEXT,
-    role VARCHAR(100),
-    social JSONB,
-    created_at TIMESTAMP DEFAULT NOW()
-);
+// ===== TOPICS COLLECTION =====
+// Collection: topics
+{
+  _id: ObjectId("..."),
+  slug: "devops",                 // unique index
+  name: "DevOps",
+  description: "CI/CD, Docker, Kubernetes và Cloud",
+  icon: "🚀",
+  color: "#FF6B6B",
+  order: 1
+}
 
--- Posts table
-CREATE TABLE posts (
-    slug VARCHAR(200) PRIMARY KEY,
-    title VARCHAR(500) NOT NULL,
-    excerpt TEXT,
-    thumbnail VARCHAR(500),
-    content_html TEXT NOT NULL,
-    type VARCHAR(20) NOT NULL CHECK (type IN ('series', 'standalone')),
-    cluster_slug VARCHAR(100) REFERENCES clusters(slug),
-    resource_slug VARCHAR(100) REFERENCES resources(slug),
-    author_slug VARCHAR(100) NOT NULL REFERENCES authors(slug),
-    published_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP,
-    reading_time INT,
-    featured BOOLEAN DEFAULT FALSE,
-    
-    -- Constraint: series posts must have cluster, standalone must have resource
-    CONSTRAINT post_type_check CHECK (
-        (type = 'series' AND cluster_slug IS NOT NULL AND resource_slug IS NULL) OR
-        (type = 'standalone' AND resource_slug IS NOT NULL AND cluster_slug IS NULL)
-    )
-);
+// ===== CLUSTERS COLLECTION =====
+// Collection: clusters
+{
+  _id: ObjectId("..."),
+  slug: "docker-co-ban",          // unique index
+  topicSlug: "devops",            // reference to topics
+  name: "Docker cơ bản",
+  description: "Học Docker từ A-Z",
+  thumbnail: "/images/clusters/docker.jpg",
+  order: 1,
+  
+  // Denormalized for quick access (optional)
+  topic: {
+    slug: "devops",
+    name: "DevOps"
+  }
+}
 
--- Tags table
-CREATE TABLE tags (
-    slug VARCHAR(100) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL
-);
+// ===== RESOURCES COLLECTION =====
+// Collection: resources
+{
+  _id: ObjectId("..."),
+  slug: "podcast",                // unique index
+  name: "Podcast",
+  description: "Podcast về công nghệ",
+  icon: "🎙️",
+  thumbnail: "/images/resources/podcast.jpg"
+}
 
--- Post-Tag junction table (M:N)
-CREATE TABLE post_tags (
-    post_slug VARCHAR(200) REFERENCES posts(slug) ON DELETE CASCADE,
-    tag_slug VARCHAR(100) REFERENCES tags(slug) ON DELETE CASCADE,
-    PRIMARY KEY (post_slug, tag_slug)
-);
+// ===== POSTS COLLECTION =====
+// Collection: posts
+{
+  _id: ObjectId("..."),
+  slug: "docker-la-gi",           // unique index
+  title: "Docker là gì? Tại sao nên dùng Docker?",
+  excerpt: "Tìm hiểu Docker từ cơ bản đến nâng cao...",
+  thumbnail: "/images/posts/docker-la-gi.jpg",
+  content_html: "<article>...</article>",
+  
+  // Post type discriminator
+  type: "series",                 // "series" | "standalone"
+  
+  // For series posts (type = "series")
+  clusterSlug: "docker-co-ban",
+  
+  // For standalone posts (type = "standalone")  
+  resourceSlug: null,
+  
+  // Author reference
+  authorSlug: "nguyen-van-a",
+  
+  // Tags - embedded array (M:N denormalized)
+  tags: [
+    { slug: "docker", name: "Docker" },
+    { slug: "devops", name: "DevOps" },
+    { slug: "container", name: "Container" }
+  ],
+  
+  // Timestamps
+  publishedAt: ISODate("2024-03-15T10:00:00Z"),
+  updatedAt: ISODate("2024-03-20T14:30:00Z"),
+  
+  // Metadata
+  readingTime: 8,
+  featured: true,
+  
+  // Denormalized for quick access (optional)
+  author: {
+    slug: "nguyen-van-a",
+    name: "Nguyễn Văn A",
+    avatar: "/images/authors/nguyen-van-a.jpg"
+  },
+  cluster: {
+    slug: "docker-co-ban",
+    name: "Docker cơ bản",
+    topicSlug: "devops"
+  },
+  topic: {
+    slug: "devops",
+    name: "DevOps"
+  }
+}
 
--- Collections table
-CREATE TABLE collections (
-    slug VARCHAR(100) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    thumbnail VARCHAR(500),
-    curator_slug VARCHAR(100) REFERENCES authors(slug),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP
-);
+// ===== TAGS COLLECTION =====
+// Collection: tags
+{
+  _id: ObjectId("..."),
+  slug: "docker",                 // unique index
+  name: "Docker",
+  postCount: 15                   // computed/updated field
+}
 
--- Collection-Post junction table (M:N with order)
-CREATE TABLE collection_posts (
-    collection_slug VARCHAR(100) REFERENCES collections(slug) ON DELETE CASCADE,
-    post_slug VARCHAR(200) REFERENCES posts(slug) ON DELETE CASCADE,
-    "order" INT DEFAULT 0,
-    PRIMARY KEY (collection_slug, post_slug)
-);
-
--- Indexes for performance
-CREATE INDEX idx_posts_cluster ON posts(cluster_slug);
-CREATE INDEX idx_posts_resource ON posts(resource_slug);
-CREATE INDEX idx_posts_author ON posts(author_slug);
-CREATE INDEX idx_posts_published ON posts(published_at DESC);
-CREATE INDEX idx_clusters_topic ON clusters(topic_slug);
+// ===== COLLECTIONS COLLECTION =====
+// Collection: collections (curated lists)
+{
+  _id: ObjectId("..."),
+  slug: "best-docker-articles",   // unique index
+  name: "Bài viết Docker hay nhất",
+  description: "Tuyển tập các bài viết Docker được đọc nhiều nhất",
+  thumbnail: "/images/collections/docker-best.jpg",
+  curatorSlug: "nguyen-van-a",
+  
+  // Embedded posts list with order (M:N denormalized)
+  posts: [
+    {
+      slug: "docker-la-gi",
+      title: "Docker là gì?",
+      thumbnail: "/images/posts/docker-la-gi.jpg",
+      order: 1
+    },
+    {
+      slug: "dockerfile-best-practices",
+      title: "Dockerfile Best Practices",
+      thumbnail: "/images/posts/dockerfile.jpg",
+      order: 2
+    }
+  ],
+  
+  // Denormalized curator info
+  curator: {
+    slug: "nguyen-van-a",
+    name: "Nguyễn Văn A",
+    avatar: "/images/authors/nguyen-van-a.jpg"
+  },
+  
+  createdAt: ISODate("2024-06-01T00:00:00Z"),
+  updatedAt: ISODate("2024-06-15T00:00:00Z")
+}
 ```
+
+### Indexes
+
+```javascript
+// ===== INDEXES =====
+
+// Authors
+db.authors.createIndex({ slug: 1 }, { unique: true })
+
+// Topics
+db.topics.createIndex({ slug: 1 }, { unique: true })
+db.topics.createIndex({ order: 1 })
+
+// Clusters
+db.clusters.createIndex({ slug: 1 }, { unique: true })
+db.clusters.createIndex({ topicSlug: 1, order: 1 })
+
+// Resources
+db.resources.createIndex({ slug: 1 }, { unique: true })
+
+// Posts - Main indexes
+db.posts.createIndex({ slug: 1 }, { unique: true })
+db.posts.createIndex({ type: 1 })
+db.posts.createIndex({ clusterSlug: 1, publishedAt: -1 })
+db.posts.createIndex({ resourceSlug: 1, publishedAt: -1 })
+db.posts.createIndex({ authorSlug: 1, publishedAt: -1 })
+db.posts.createIndex({ "tags.slug": 1, publishedAt: -1 })
+db.posts.createIndex({ publishedAt: -1 })
+db.posts.createIndex({ featured: 1, publishedAt: -1 })
+
+// Tags
+db.tags.createIndex({ slug: 1 }, { unique: true })
+db.tags.createIndex({ postCount: -1 })
+
+// Collections
+db.collections.createIndex({ slug: 1 }, { unique: true })
+db.collections.createIndex({ curatorSlug: 1 })
+```
+
+### Common Queries
+
+```javascript
+// ===== COMMON QUERIES =====
+
+// 1. Get all posts in a cluster (for cluster page)
+db.posts.find({ 
+  clusterSlug: "docker-co-ban",
+  type: "series"
+}).sort({ publishedAt: -1 })
+
+// 2. Get all posts in a resource (for resource page)
+db.posts.find({ 
+  resourceSlug: "podcast",
+  type: "standalone"
+}).sort({ publishedAt: -1 })
+
+// 3. Get posts by tag (for tag page)
+db.posts.find({ 
+  "tags.slug": "docker" 
+}).sort({ publishedAt: -1 })
+
+// 4. Get posts by author (for author page)
+db.posts.find({ 
+  authorSlug: "nguyen-van-a" 
+}).sort({ publishedAt: -1 })
+
+// 5. Get featured posts (for home page)
+db.posts.find({ 
+  featured: true 
+}).sort({ publishedAt: -1 }).limit(5)
+
+// 6. Get latest posts (for home page)
+db.posts.find({}).sort({ publishedAt: -1 }).limit(10)
+
+// 7. Get all clusters in a topic (for topic page)
+db.clusters.find({ 
+  topicSlug: "devops" 
+}).sort({ order: 1 })
+
+// 8. Get post with full details (for post page)
+db.posts.findOne({ slug: "docker-la-gi" })
+
+// 9. Get related posts (same cluster, exclude current)
+db.posts.find({ 
+  clusterSlug: "docker-co-ban",
+  slug: { $ne: "docker-la-gi" }
+}).sort({ publishedAt: -1 }).limit(5)
+
+// 10. Aggregate: Count posts per tag
+db.posts.aggregate([
+  { $unwind: "$tags" },
+  { $group: { 
+    _id: "$tags.slug", 
+    name: { $first: "$tags.name" },
+    count: { $sum: 1 } 
+  }},
+  { $sort: { count: -1 }}
+])
+
+// 11. Full-text search
+db.posts.createIndex({ title: "text", excerpt: "text", content_html: "text" })
+db.posts.find({ $text: { $search: "docker container" }})
+```
+
+### Schema Validation (Optional)
+
+```javascript
+// ===== SCHEMA VALIDATION =====
+
+db.createCollection("posts", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["slug", "title", "content_html", "type", "authorSlug", "publishedAt"],
+      properties: {
+        slug: { bsonType: "string" },
+        title: { bsonType: "string" },
+        type: { enum: ["series", "standalone"] },
+        clusterSlug: { bsonType: ["string", "null"] },
+        resourceSlug: { bsonType: ["string", "null"] },
+        authorSlug: { bsonType: "string" },
+        tags: {
+          bsonType: "array",
+          items: {
+            bsonType: "object",
+            required: ["slug", "name"],
+            properties: {
+              slug: { bsonType: "string" },
+              name: { bsonType: "string" }
+            }
+          }
+        }
+      },
+      // Custom validation: series must have clusterSlug, standalone must have resourceSlug
+      oneOf: [
+        {
+          properties: { type: { const: "series" } },
+          required: ["clusterSlug"]
+        },
+        {
+          properties: { type: { const: "standalone" } },
+          required: ["resourceSlug"]
+        }
+      ]
+    }
+  }
+})
+```
+
+### Data Model Design Notes
+
+```mermaid
+flowchart TB
+    subgraph "EMBEDDING vs REFERENCING"
+        direction TB
+        
+        subgraph "Embedded (Denormalized)"
+            E1["Post.tags[]<br/>- Nhanh khi query<br/>- Cần sync khi tag thay đổi"]
+            E2["Post.author{}<br/>- Nhanh khi render<br/>- Cần sync khi author thay đổi"]
+            E3["Collection.posts[]<br/>- Curated, ít thay đổi<br/>- Order quan trọng"]
+        end
+        
+        subgraph "Referenced (Normalized)"
+            R1["Post.authorSlug<br/>- Lookup khi cần full info"]
+            R2["Post.clusterSlug<br/>- Lookup cho breadcrumb"]
+            R3["Cluster.topicSlug<br/>- Lookup cho navigation"]
+        end
+    end
+    
+    style E1 fill:#c8e6c9
+    style E2 fill:#c8e6c9
+    style E3 fill:#c8e6c9
+    style R1 fill:#bbdefb
+    style R2 fill:#bbdefb
+    style R3 fill:#bbdefb
+```
+
+**Nguyên tắc thiết kế:**
+
+| Pattern | Khi nào dùng | Ví dụ |
+|---------|-------------|-------|
+| **Embed** | Data ít thay đổi, query thường xuyên | `Post.tags`, `Post.author` |
+| **Reference** | Data thay đổi nhiều, cần consistency | `Post.authorSlug`, `Cluster.topicSlug` |
+| **Hybrid** | Embed summary + Reference full | `Post.author{}` + `Post.authorSlug` |
 
 ## View Diagram trên các công cụ
 
